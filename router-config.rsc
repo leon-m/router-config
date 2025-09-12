@@ -54,9 +54,9 @@ local BlueZonePool     "$BlueZoneNetwork.2-$BlueZoneNetwork.254"
 /ip dhcp-server add address-pool=zone-blue interface=zone-blue lease-time=1d name=zone-blue
 /ip dhcp-server add address-pool=zone-green interface=zone-green lease-time=1d name=zone-green
 
-/ip dhcp-server network add address="$RedZoneNetwork.0/24" dns-server="$RedZoneNetwork.99" gateway=$RedZoneIp comment="zone-red"
-/ip dhcp-server network add address="$BlueZoneNetwork.0/24" dns-server=193.189.160.13,8.8.8.8 gateway=$BlueZoneIp comment="zone-blue"
-/ip dhcp-server network add address="$GreenZoneNetwork.0/24" dns-server=193.189.160.13,8.8.8.8 gateway=$GreenZoneIp comment="zone-green"
+/ip dhcp-server network add address="$RedZoneNetwork.0/24" dns-server="$RedZoneNetwork.99" gateway=$RedZoneIp comment="zone-red" ntp-server=$RedZoneIp
+/ip dhcp-server network add address="$BlueZoneNetwork.0/24" dns-server=193.189.160.13,8.8.8.8 gateway=$BlueZoneIp comment="zone-blue" ntp-server=$BlueZoneIp
+/ip dhcp-server network add address="$GreenZoneNetwork.0/24" dns-server=193.189.160.13,8.8.8.8 gateway=$GreenZoneIp comment="zone-green" ntp-server=$GreenZoneIp
 
 :put  "    Adding static leases"
 /ip dhcp-server lease add address="$RedZoneNetwork.20" mac-address=20:CF:30:B1:C5:CA server=zone-red
@@ -79,3 +79,4 @@ local BlueZonePool     "$BlueZoneNetwork.2-$BlueZoneNetwork.254"
 :put "Step 5. Configure NTP"
 /system ntp client set enabled=yes
 /system ntp client servers add address=pool.ntp.org comment="configured"
+/system ntp server set enabled=yes multicast=yes manycast=yes broadcast=yes broadcast-addresses="$RedZoneNetwork.255,$BlueZoneNetwork.255,$GreenZoneNetwork.255"
