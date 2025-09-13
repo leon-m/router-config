@@ -14,6 +14,7 @@ local BlueZonePool     "$BlueZoneNetwork.2-$BlueZoneNetwork.254"
 # --- Cleanup
 :put "Step 1. Configuration cleanup"
 :foreach zone in={ "zone-red"; "zone-blue"; "zone-green" } do={
+    /ip dns cache flush
     /system ntp client servers remove numbers=[find where comment="configured"]
     :put "    Cleaning zone $zone"
     /ip dhcp-server lease remove numbers=[find where server=$zone]
@@ -27,7 +28,8 @@ local BlueZonePool     "$BlueZoneNetwork.2-$BlueZoneNetwork.254"
 }
 
 # --- Bridges and layout
-:put "Step 2. Creating bridges"
+:put "Step 2. Creating bridges and layout"
+/interface ethernet set [ find default-name=ether2 ] name=WAN
 /interface bridge add comment="Leon zone" name=zone-red
 /interface bridge add comment="Urska zone" name=zone-blue
 /interface bridge add comment="Guest Zone" name=zone-green
@@ -45,18 +47,19 @@ local BlueZonePool     "$BlueZoneNetwork.2-$BlueZoneNetwork.254"
 
 # --- DHCP  stuff
 :put "Step 4. Creating DHCP configuration"
+:put "    Configuring DHCP Client"
+/ip dhcp-client set use-peer-dns=no use-peer-ntp=no WAN
+
 :put "    Creating and configuring DHCP Servers"
 /ip pool add name=zone-red ranges=$RedZonePool
 /ip pool add name=zone-blue ranges=$BlueZonePool
 /ip pool add name=zone-green ranges=$GreenZonePool
-
 /ip dhcp-server add address-pool=zone-red interface=zone-red lease-time=1d name=zone-red
 /ip dhcp-server add address-pool=zone-blue interface=zone-blue lease-time=1d name=zone-blue
 /ip dhcp-server add address-pool=zone-green interface=zone-green lease-time=1d name=zone-green
-
 /ip dhcp-server network add address="$RedZoneNetwork.0/24" dns-server="$RedZoneNetwork.99" gateway=$RedZoneIp comment="zone-red" ntp-server=$RedZoneIp
-/ip dhcp-server network add address="$BlueZoneNetwork.0/24" dns-server=193.189.160.13,8.8.8.8 gateway=$BlueZoneIp comment="zone-blue" ntp-server=$BlueZoneIp
-/ip dhcp-server network add address="$GreenZoneNetwork.0/24" dns-server=193.189.160.13,8.8.8.8 gateway=$GreenZoneIp comment="zone-green" ntp-server=$GreenZoneIp
+/ip dhcp-server network add address="$BlueZoneNetwork.0/24" dns-server=$BlueZoneIp gateway=$BlueZoneIp comment="zone-blue" ntp-server=$BlueZoneIp
+/ip dhcp-server network add address="$GreenZoneNetwork.0/24" dns-server=$GreenZoneIp gateway=$GreenZoneIp comment="zone-green" ntp-server=$GreenZoneIp
 
 :put  "    Adding static leases"
 /ip dhcp-server lease add address="$RedZoneNetwork.20" mac-address=20:CF:30:B1:C5:CA server=zone-red
@@ -76,7 +79,12 @@ local BlueZonePool     "$BlueZoneNetwork.2-$BlueZoneNetwork.254"
 /ip dhcp-server lease add address="$GreenZoneNetwork.72" client-id=Omega-247D mac-address=40:A3:6B:C7:24:7F server=zone-green
 
 # --- NTP stuff
-:put "Step 5. Configure NTP"
+:put "Step 5. Configure NTP Service"
 /system ntp client set enabled=yes
 /system ntp client servers add address=pool.ntp.org comment="configured"
 /system ntp server set enabled=yes multicast=yes manycast=yes broadcast=yes broadcast-addresses="$RedZoneNetwork.255,$BlueZoneNetwork.255,$GreenZoneNetwork.255"
+
+# --- DNS stuff
+:put "Step 6. Configure DNS Service"
+ip dns set servers=193.189.160.13,208.67.222.222,8.8.8.8,8.8.4.4
+ip dns set allow-remote-requests=no cache-max-ttl=1d 
