@@ -1,21 +1,21 @@
-local RedZoneNetwork   "192.168.13"
-local RedZoneIp        "$RedZoneNetwork.1"
-local RedZonePool      "$RedZoneNetwork.2-$RedZoneNetwork.254"
-local GreenZoneNetwork "192.168.15"
-local GreenZoneIp      "$GreenZoneNetwork.1"
-local GreenZonePool    "$GreenZoneNetwork.2-$GreenZoneNetwork.254"
-local BlueZoneNetwork  "192.168.17"
-local BlueZoneIp       "$BlueZoneNetwork.1"
-local BlueZonePool     "$BlueZoneNetwork.2-$BlueZoneNetwork.254"
-
+global RedZoneNetwork   "192.168.13"
+global RedZoneIp        "$RedZoneNetwork.1"
+global RedZonePool      "$RedZoneNetwork.2-$RedZoneNetwork.254"
+global GreenZoneNetwork "192.168.15"
+global GreenZoneIp      "$GreenZoneNetwork.1"
+global GreenZonePool    "$GreenZoneNetwork.2-$GreenZoneNetwork.254"
+global BlueZoneNetwork  "192.168.17"
+global BlueZoneIp       "$BlueZoneNetwork.1"
+global BlueZonePool     "$BlueZoneNetwork.2-$BlueZoneNetwork.254"
+global step 1
+global Zones            { "zone-red"; "zone-blue"; "zone-green" }
 #
 # === Zones
 # 
 # --- Cleanup
-:put "Step 1. Configuration cleanup"
-:foreach zone in={ "zone-red"; "zone-blue"; "zone-green" } do={
-    /ip dns cache flush
-    /system ntp client servers remove numbers=[find where comment="configured"]
+:put "Step $step. Configuration cleanup"
+
+:foreach zone in=$Zones do={
     :put "    Cleaning zone $zone"
     /ip dhcp-server lease remove numbers=[find where server=$zone]
     /ip dhcp-server network remove numbers=[find where comment="$zone"] 
@@ -24,11 +24,11 @@ local BlueZonePool     "$BlueZoneNetwork.2-$BlueZoneNetwork.254"
     /ip address remove numbers=[find where interface=$zone]
     /interface bridge port remove numbers=[find bridge=$zone]
     /interface bridge remove numbers=[find where name=$zone]
-
 }
 
 # --- Bridges and layout
-:put "Step 2. Creating bridges and layout"
+:set step ($step + 1)
+:put "Step $step. Creating bridges and layout"
 /interface ethernet set [ find default-name=ether2 ] name=WAN
 /interface bridge add comment="Leon zone" name=zone-red
 /interface bridge add comment="Urska zone" name=zone-blue
@@ -40,13 +40,15 @@ local BlueZonePool     "$BlueZoneNetwork.2-$BlueZoneNetwork.254"
 /interface bridge port add bridge=zone-red   interface=ether8
 
 # --- Static IP Addresses
-:put "Step 3. Assigning static IP addresses"
+:set step ($step + 1)
+:put "Step $step. Assigning static IP addresses"
 /ip address add address="$RedZoneIp/24" comment="Red router" interface=zone-red network="$RedZoneNetwork.0"
 /ip address add address="$BlueZoneIp/24" comment="Blue router" interface=zone-blue network="$BlueZoneNetwork.0"
 /ip address add address="$GreenZoneIp/24" comment="Green router" interface=zone-green network="$GreenZoneNetwork.0"
 
 # --- DHCP  stuff
-:put "Step 4. Creating DHCP configuration"
+:set step ($step + 1)
+:put "Step $step. Creating DHCP configuration"
 :put "    Configuring DHCP Client"
 /ip dhcp-client set use-peer-dns=no use-peer-ntp=no WAN
 
@@ -79,12 +81,9 @@ local BlueZonePool     "$BlueZoneNetwork.2-$BlueZoneNetwork.254"
 /ip dhcp-server lease add address="$GreenZoneNetwork.72" client-id=Omega-247D mac-address=40:A3:6B:C7:24:7F server=zone-green
 
 # --- NTP stuff
-:put "Step 5. Configure NTP Service"
-/system ntp client set enabled=yes
-/system ntp client servers add address=pool.ntp.org comment="configured"
-/system ntp server set enabled=yes multicast=yes manycast=yes broadcast=yes broadcast-addresses="$RedZoneNetwork.255,$BlueZoneNetwork.255,$GreenZoneNetwork.255"
+set step ($step + 1)
+import ntp.rsc
 
 # --- DNS stuff
-:put "Step 6. Configure DNS Service"
-ip dns set servers=193.189.160.13,208.67.222.222,8.8.8.8,8.8.4.4
-ip dns set allow-remote-requests=no cache-max-ttl=1d 
+set step ($step + 1)
+:import dns.rsc
