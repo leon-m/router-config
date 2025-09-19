@@ -5,7 +5,7 @@ global step
 
 :put "Step $step. Configure NTP Service"
 # === Cleanup
-/system ntp client servers remove numbers=[find where comment="configured"]
+/system ntp client servers remove numbers=[find where comment="configured by config script"]
 
 /system ntp client set enabled=yes
 /system ntp client servers add address=pool.ntp.org comment="configured by config script"
