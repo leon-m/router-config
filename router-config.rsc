@@ -38,3 +38,7 @@ set step ($step + 1)
 # --- Firewall stuff
 set step ($step + 1)
 :import firewall.rsc
+
+# --- DDNS update
+set step ($step + 1)
+:import dynu.rsc
