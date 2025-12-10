@@ -1,12 +1,11 @@
 global RedZoneNetwork
 global GreenZoneNetwork
 global BlueZoneNetwork
-global step
 
 global ConfigVerCur
 global ConfigVerNew
 
-:put "Step $step. Configure NTP Service"
+:put "  Configure NTP Service"
 # === Cleanup
 /system ntp client servers remove numbers=[find where comment="$ConfigVerCur"]
 

@@ -1,9 +1,8 @@
 
-global step
 global ConfigVerCur
 global ConfigVerNew
-
-:put "Step $step. Creating and scheduling dynu.com DDNS update script"
+global Deployment
+:put "  Creating and scheduling dynu.com DDNS update script"
 
 /system scheduler remove numbers=[find where comment="$ConfigVerCur"]
 /system script remove numbers=[find where comment="$ConfigVerCur"]
@@ -38,5 +37,6 @@ global ConfigVerNew
     }
 }
 
-# uncomment this for deployment
-#/system scheduler add comment="$ConfigVerNew" interval=10s name=dydnu_scheduler on-event="/system script run Dynu" policy=read,write,test start-time=startup
+if ( $Deployment = "yes" ) do={
+    /system scheduler add interval=10s name=dydnu_scheduler on-event="/system script run Dynu" policy=read,write,test start-time=startup  comment="$ConfigVerNew"
+}
