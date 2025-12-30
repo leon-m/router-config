@@ -10,7 +10,7 @@ global Deployment
 /system script add name=Dynu policy=read,write,test comment="$ConfigVerNew" source={
     :global ddnsuser "l11mlakar"
     :global ddnspass "mawmAw-7byjwy-nudsat"
-    :global theinterface "WAN"
+    :global theinterface "telekom"
     :global ddnshost "moja-domena.eu"
     :global ipddns [:resolve $ddnshost];
     :global ipfresh [ /ip address get [/ip address find interface=$theinterface ] address ]
@@ -32,7 +32,7 @@ global Deployment
             :global ipddns $ipfresh
             :log debug ("DynuDDNS: UPODATED, $ddnshost A record changed $ipddns -> $ipfresh")
         } else={
-            :log info "DynuDDNS: update not needed.";
+            :log debug "DynuDDNS: update not needed.";
         }
     }
 }
