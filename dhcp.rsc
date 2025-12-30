@@ -25,12 +25,14 @@ global ConfigVerNew
 /ip pool add name=zone-blue  ranges=$BlueZonePool  comment="$ConfigVerNew"
 /ip pool add name=zone-green ranges=$GreenZonePool comment="$ConfigVerNew"
 
+/ip dhcp-server option add name=domain-suffix code=15 value=0x6d6f6a612d646f6d656e612e6575 comment="$ConfigVerNew"
+
 /ip dhcp-server add address-pool=zone-red   interface=zone-red   lease-time=1d name=zone-red   comment="$ConfigVerNew"
 /ip dhcp-server add address-pool=zone-blue  interface=zone-blue  lease-time=1d name=zone-blue  comment="$ConfigVerNew"
 /ip dhcp-server add address-pool=zone-green interface=zone-green lease-time=1d name=zone-green comment="$ConfigVerNew"
-/ip dhcp-server network add address="$RedZoneNetwork.0/24"   dns-server="$RedZoneNetwork.99" gateway=$RedZoneIp   ntp-server=$RedZoneIp   comment="$ConfigVerNew"
-/ip dhcp-server network add address="$BlueZoneNetwork.0/24"  dns-server=$BlueZoneIp          gateway=$BlueZoneIp  ntp-server=$BlueZoneIp  comment="$ConfigVerNew"
-/ip dhcp-server network add address="$GreenZoneNetwork.0/24" dns-server=$GreenZoneIp         gateway=$GreenZoneIp ntp-server=$GreenZoneIp comment="$ConfigVerNew"
+/ip dhcp-server network add address="$RedZoneNetwork.0/24"   dns-server="$RedZoneNetwork.99" gateway=$RedZoneIp   ntp-server=$RedZoneIp   dhcp-option=domain-suffix comment="$ConfigVerNew"
+/ip dhcp-server network add address="$BlueZoneNetwork.0/24"  dns-server=$BlueZoneIp          gateway=$BlueZoneIp  ntp-server=$BlueZoneIp  dhcp-option=domain-suffix comment="$ConfigVerNew"
+/ip dhcp-server network add address="$GreenZoneNetwork.0/24" dns-server=$GreenZoneIp         gateway=$GreenZoneIp ntp-server=$GreenZoneIp dhcp-option=domain-suffix comment="$ConfigVerNew"
 
 :put  "    Adding static leases"
 # ???

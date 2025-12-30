@@ -1,4 +1,4 @@
-global Deployment       "no"
+global Deployment       "yes"
 
 global RedZoneNetwork
 global GreenZoneNetwork
@@ -13,17 +13,17 @@ global BlueZoneNetwork
     :set BlueZoneNetwork  "192.168.17"
 }
 global RedZoneIp        "$RedZoneNetwork.1"
-global RedZonePool      "$RedZoneNetwork.2-$RedZoneNetwork.254"
+global RedZonePool      "$RedZoneNetwork.10-$RedZoneNetwork.254"
 global GreenZoneIp      "$GreenZoneNetwork.1"
-global GreenZonePool    "$GreenZoneNetwork.2-$GreenZoneNetwork.254"
+global GreenZonePool    "$GreenZoneNetwork.10-$GreenZoneNetwork.254"
 global BlueZoneIp       "$BlueZoneNetwork.1"
-global BlueZonePool     "$BlueZoneNetwork.2-$BlueZoneNetwork.254"
+global BlueZonePool     "$BlueZoneNetwork.10-$BlueZoneNetwork.254"
 global Zones            { "zone-red"; "zone-blue"; "zone-green" }
 # When updating config set the ConfigVerOld  to the ConfigVer and
 # move ConfigVer forward. The scripts will remove the necessary
 # parts of previous configuration before applying new config
-global ConfigVerCur     "config v0.1.0"
-global ConfigVerNew     "config v0.1.0"
+global ConfigVerCur     "config v0.2.0"
+global ConfigVerNew     "config v0.2.0"
 
 # ===================================================================
 #

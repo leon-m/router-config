@@ -19,9 +19,9 @@ global ConfigVerNew
 /ipv6 firewall filter add chain=input action=drop   in-interface-list=internet comment="temporary fence"
 
 :put "    Temporarily disabling NAT and removing old firewall filters"
-/ip firewall nat    remove       numbers=[find where comment="$ConfigVerCur"]
-/ip firewall filter remove       numbers=[find where comment="$ConfigVerCur"]
-/ip firewall address-list remove numbers=[find where comment="$ConfigVerCur"]
+/ip firewall nat    remove       numbers=[find where comment~"$ConfigVerCur"]
+/ip firewall filter remove       numbers=[find where comment~"$ConfigVerCur"]
+/ip firewall address-list remove numbers=[find where comment~"$ConfigVerCur"]
 
 :put "    Setting up new ddress lists"
 # -- Intranet
@@ -71,7 +71,7 @@ global ConfigVerNew
 
 
 :put "    Restoring NAT service on internet interface"
-/ip firewall nat add chain=srcnat out-interface-list=internet ipsec-policy=out,none action=masquerade comment="$ConfigVerNew"
+/ip firewall nat add chain=srcnat out-interface=telekom ipsec-policy=out,none action=masquerade comment="$ConfigVerNew"
 
 :put "    Setting up new filters"
 # =============================================================================
@@ -82,35 +82,38 @@ global ConfigVerNew
 # =============================================================================
 # =============================================================================
 
-# --- protection for router itself, input chain
+# --- input chain. protection for router itself
 #  Input chain filters processed in the following order
-#   1. accept everything for known connections
-#   2. accept everything arriving on the admin interface (see barebone.rsc for where the "admin" is mapped to)
-#   3. accept SSH from anywhere [make sure, though, that only authorized kays may acces it, no username/password access]
-#   4. accept DNS queries from intranet
-#   5. process ICMPs via ICMP input chain
-#   6. drop the rest
-/ip firewall filter add chain=input action=accept connection-state=established,related,untracked comment="$ConfigVerNew" 
-/ip firewall filter add chain=input action=accept in-interface="admin" comment="$ConfigVerNew"
-/ip firewall filter add chain=input action=accept dst-port=22 protocol=tcp comment="$ConfigVerNew"
-/ip firewall filter add chain=input action=accept dst-port=53 protocol=tcp in-interface-list=intranet comment="$ConfigVerNew"
-/ip firewall filter add chain=input action=accept dst-port=53 protocol=udp in-interface-list=intranet comment="$ConfigVerNew"
-/ip firewall filter add chain=input action=jump jump-target=in-icmp protocol=icmp comment="$ConfigVerNew"
-/ip firewall filter add chain=input action=drop comment="$ConfigVerNew" 
+#   1. pass all ICMPs through a separate chain
+#   2. accept all establsihed connections
+#   3. accept everything arriving on the magenta (admin) interface (see barebone.rsc for where the "magenta" is mapped to)
+#   4. accept SSH from anywhere [make sure, though, that only authorized kays may acces it, no username/password access]
+#   5. accept DNS queries from intranet
+#   6. drop everythign else
+/ip firewall filter add chain=input protocol=icmp action=jump jump-target=chain-icmp comment="$ConfigVerNew :process all ICMPs in a separate chain"
+/ip firewall filter add chain=input action=accept connection-state=established,related,untracked comment="$ConfigVerNew :accept all established sessions" 
+/ip firewall filter add chain=input action=accept in-interface=magenta comment="$ConfigVerNew :accept all trafic from magenta (admin) interface"
+/ip firewall filter add chain=input action=accept dst-port=22 protocol=tcp comment="$ConfigVerNew :accept ssh from anywhere"
+/ip firewall filter add chain=input action=accept dst-port=53 protocol=tcp in-interface-list=intranet comment="$ConfigVerNew :accept DNS queries from intranet; tcp"
+/ip firewall filter add chain=input action=accept dst-port=53 protocol=udp in-interface-list=intranet comment="$ConfigVerNew :accept DNS queries from intranet; udp"
+/ip firewall filter add chain=input action=drop comment="$ConfigVerNew :drop all not explicitly accepted packets" 
 
 # --- protection for LAN, forward chain
 # Forward chain filters processed in the following order
 # 1. accept/fastrack everything for known connections
 # 2. drop invalid connections
 # 3. drop anything targeted to private numbers and going from intranet to internet
+# 7. process icmp packets via ICMP chain
 # 4. drop everything coming from internet but not going through NAT
 # 5. drop evertything arriving from internet with source address being one of private numbers
 # 6. for each zone drop packets arriving from intranet zones but not having zone source address
-# 7. process icmp packets via ICMP chain
 # 8. accept the rest of the lot
+/ip firewall filter add chain=forward protocol=icmp in-interface-list=intranet action=jump jump-target=chain-icmp comment="$ConfigVerNew :process all ICMPs in a separate chain"
 /ip firewall filter add chain=forward action=fasttrack-connection connection-state=established,related comment="$ConfigVerNew"
 /ip firewall filter add chain=forward action=accept connection-state=established,related,untracked comment="$ConfigVerNew" 
 /ip firewall filter add chain=forward action=drop connection-state=invalid log=yes log-prefix="!invalid:" comment="$ConfigVerNew" 
+
+/ip firewall filter add chain=forward action=jump jump-target=chain-icmp protocol=icmp comment="$ConfigVerNew"
 # Drop connection attempts to non-public addresses
 /ip firewall filter add chain=forward action=drop dst-address-list=ipv4_private in-interface-list=intranet out-interface-list=internet log=yes log-prefix="!private number:" comment="$ConfigVerNew" 
 # Drop incoming packets that were not NAT'ed
@@ -121,27 +124,21 @@ global ConfigVerNew
 /ip firewall filter add chain=forward action=drop in-interface=zone-red   src-address="!$RedZoneNetwork.0/24"   log=yes log-prefix="!red address:" comment="$ConfigVerNew"
 /ip firewall filter add chain=forward action=drop in-interface=zone-blue  src-address="!$BlueZoneNetwork.0/24"  log=yes log-prefix="!blue address:" comment="$ConfigVerNew"
 /ip firewall filter add chain=forward action=drop in-interface=zone-green src-address="!$GreenZoneNetwork.0/24" log=yes log-prefix="!green address:" comment="$ConfigVerNew"
-/ip firewall filter add chain=forward action=jump jump-target=in-icmp protocol=icmp comment="$ConfigVerNew"
 /ip firewall filter add chain=forward action=accept comment="$ConfigVerNew"
 
-# -- ICMP chain for input chain
+# -- ICMP processing chain
 # see https://www.iana.org/assignments/icmp-parameters/icmp-parameters.xhtml for ICMP types and codes
+# Acept eveything if originates from Intranet, block extended echo, redirect and traceroute requests from elsewhere
+/ip firewall filter add chain=chain-icmp action=accept in-interface-list=intranet comment="$ConfigVerNew :accept everything from Intranet regardless where it goes" 
+/ip firewall filter add chain=chain-icmp protocol=icmp action=drop icmp-options=42:0 in-interface-list=internet comment="$ConfigVerNew :block extended echo requests"
+/ip firewall filter add chain=chain-icmp protocol=icmp action=drop icmp-options=5:0-3 in-interface-list=internet comment="$ConfigVerNew :block redirect requests"
+/ip firewall filter add chain=chain-icmp protocol=icmp action=drop icmp-options=30:0 in-interface-list=internet comment="$ConfigVerNew :block traceroute requests"
+# TODO: consider logging them
+/ip firewall filter add chain=chain-icmp action=accept in-interface-list=internet comment="$ConfigVerNew :accept other ICMP requests"
 
-# acecpt everything from LAN
-/ip firewall filter add chain=in-icmp action=accept protocol=icmp in-interface-list=intranet comment="$ConfigVerNew" 
-# as for the sharks-be-there Internet, let's start by blocking redirect and echo requests only.  
-# echo request
-/ip firewall filter add chain=in-icmp action=drop protocol=icmp icmp-options=8:0 in-interface-list=internet comment="$ConfigVerNew"
-# extended echo request
-/ip firewall filter add chain=in-icmp action=drop protocol=icmp icmp-options=42:0 in-interface-list=internet comment="$ConfigVerNew"
-# type 5 - redirect
-/ip firewall filter add chain=in-icmp action=drop protocol=icmp icmp-options=5:0-3 in-interface-list=internet comment="$ConfigVerNew"
-# type 30 - traceroute, deprecated, drop nonetheless
-/ip firewall filter add chain=in-icmp action=drop protocol=icmp icmp-options=30:0 in-interface-list=internet comment="$ConfigVerNew"
-# as for the rest - accept them for now but observe log. They can be used for DOS type of attacks, eg. type 3 to force router to keep
-# reconecting. Perhaps complement this using techniques for [D]DoS prevention
-/ip firewall filter add chain=in-icmp action=accept protocol=icmp in-interface-list=internet log=yes log-prefix="!icmp" comment="$ConfigVerNew"
-
+# ##################
 # TODO: For now we'll disable IPv6 settings
+# ##################
+
 :put "    Removing temporary defensive filters"
 /ip firewall filter remove numbers=[find where comment="temporary fence"]

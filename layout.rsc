@@ -17,12 +17,18 @@ global ConfigVerNew
 
 #
 # This is a port assignment into the zones.
+#    - magenta is an interface name for administrative/maintenanta access via Never-O-Net SSID
+#    - WAN is internet port
+#    - green zone is guest network
+#    - blue zone is second home network with own wifi AP
+#    - red zone is my private network
+#
 # +-------------------------------------------------------------------------------------------+
 # |                                                                                           |
 # |    +-----+ +-----+ +-----+ +-----+ +-----+     +-----+ +-----+ +-----+ +-----+ +-----+    |
 # |    |  1  | |  2  | |  3  | |  4  | |  5  |     |  6  | |  7  | |  8  | |  9  | |  10 |    |
 # |    +-----+ +-----+ +-----+ +-----+ +-----+     +-----+ +-----+ +-----+ +-----+ +-----+    |
-# |    support   WAN    green   blue                 red     red     red     red     red      |
+# |      WAN             green   blue                red     red     red     red   magenta    |
 # |                                                                                           |
 # +-------------------------------------------------------------------------------------------+
 
@@ -44,9 +50,9 @@ global ConfigVerNew
 /interface bridge port add bridge=zone-red   interface=ether7  comment="$ConfigVerNew"
 /interface bridge port add bridge=zone-red   interface=ether8  comment="$ConfigVerNew"
 /interface bridge port add bridge=zone-red   interface=ether9  comment="$ConfigVerNew"
-/interface bridge port add bridge=zone-red   interface=ether10 comment="$ConfigVerNew"
 
-/interface ethernet set [ find default-name=ether2 ] name=WAN
+# Wide Wild World lies there
+/interface ethernet set [ find default-name=ether1] name=WAN
 
 :put "    Setting up interface lists"
 /interface/list add name=internet comment="$ConfigVerNew"
