@@ -52,18 +52,22 @@ global ConfigVerNew
 /interface bridge port add bridge=zone-red   interface=ether9  comment="$ConfigVerNew"
 
 # Wide Wild World lies there
-/interface ethernet set [ find default-name=ether1] name=WAN
+/interface ethernet set [find default-name=ether1] name=WAN comment="$ConfigVerNew :uplink to ISP"
 
 :put "    Setting up interface lists"
 /interface/list add name=internet comment="$ConfigVerNew"
 /interface/list add name=intranet comment="$ConfigVerNew"
-/interface/list add name=guest comment="$ConfigVerNew"
+/interface/list add name=guest comment="$ConfigVerNew :every zone but red will have restrictions"
+/interface/list add name=protected comment="$ConfigVerNew :blue and red zones"
 
 /interface list member add list=internet interface=WAN comment="$ConfigVerNew"
 /interface/list/member add list=intranet interface=zone-red comment="$ConfigVerNew"
 /interface/list/member add list=intranet interface=zone-blue comment="$ConfigVerNew"
 /interface/list/member add list=intranet interface=zone-green comment="$ConfigVerNew"
 /interface/list/member add list=guest interface=zone-green comment="$ConfigVerNew"
+/interface/list/member add list=guest interface=zone-blue comment="$ConfigVerNew"
+/interface/list/member add list=protected interface=zone-red comment="$ConfigVerNew"
+/interface/list/member add list=protected interface=zone-blue comment="$ConfigVerNew"
 
 # --- Static IP Addresses
 :put "    Assigning static IP addresses"
