@@ -22,6 +22,7 @@ global ConfigVerNew
 /ip firewall nat    remove       numbers=[find where comment~"$ConfigVerCur"]
 /ip firewall filter remove       numbers=[find where comment~"$ConfigVerCur"]
 /ip firewall address-list remove numbers=[find where comment~"$ConfigVerCur"]
+/ip firewall address-list remove numbers=[find where list=blacklist]
 
 :put "    Setting up new address lists"
 # -- Intranet
@@ -33,6 +34,9 @@ global ConfigVerNew
 /ip firewall address-list add list=support address=$RedZonePool   comment="$ConfigVerNew"
 /ip firewall address-list add list=support address=$BlueZonePool  comment="$ConfigVerNew"
 /ip firewall address-list add list=support address=$GreenZonePool comment="$ConfigVerNew"
+
+# --- IP Blacklist
+/ip firewall address-list add list=blacklist comment="$ConfigVerNew"
 
 # -- Red Zone services
 /ip firewall address-list add list=red-services address="$RedZoneNetwork.99" comment="$ConfigVerNew"
@@ -100,6 +104,7 @@ global ConfigVerNew
 #   4. accept SSH from anywhere [make sure, though, that only authorized kays may acces it, no username/password access]
 #   5. accept DNS queries from intranet
 #   6. drop everythign else
+/ip firewall raw add chain=prerouting action=drop src-address-list=blacklist comment="$ConfigVerNew :fastrack drop from blacklisted IPs even before routing"
 /ip firewall filter add chain=input protocol=icmp action=jump jump-target=chain-icmp comment="$ConfigVerNew :process all ICMPs in a separate chain"
 /ip firewall filter add chain=input action=accept connection-state=established,related,untracked comment="$ConfigVerNew :accept all established sessions" 
 /ip firewall filter add chain=input action=accept in-interface=magenta comment="$ConfigVerNew :accept all trafic from magenta (admin) interface"
@@ -107,6 +112,7 @@ global ConfigVerNew
 /ip firewall filter add chain=input action=accept dst-port=22 src-address-list=digiverse protocol=tcp comment="$ConfigVerNew :accept ssh from Digiverse"
 /ip firewall filter add chain=input action=accept dst-port=53 protocol=tcp in-interface-list=intranet comment="$ConfigVerNew :accept DNS queries from intranet; tcp"
 /ip firewall filter add chain=input action=accept dst-port=53 protocol=udp in-interface-list=intranet comment="$ConfigVerNew :accept DNS queries from intranet; udp"
+/ip firewall filter add chain=input action=add-src-to-address-list address-list=blacklist address-list-timeout=24h in-interface=telekom comment="$ConfigVerNew :log and blacklist dropped connect attemts" log=yes log-prefix="#BLACKLISTED: "
 /ip firewall filter add chain=input action=drop comment="$ConfigVerNew :drop all not explicitly accepted packets" 
 
 # --- protection for LAN, forward chain
