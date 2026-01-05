@@ -20,6 +20,7 @@ global ConfigVerNew
 
 :put "    Temporarily disabling NAT and removing old firewall filters"
 /ip firewall nat    remove       numbers=[find where comment~"$ConfigVerCur"]
+/ip firewall raw    remove       numbers=[find where comment~"$ConfigVerCur"]
 /ip firewall filter remove       numbers=[find where comment~"$ConfigVerCur"]
 /ip firewall address-list remove numbers=[find where comment~"$ConfigVerCur"]
 /ip firewall address-list remove numbers=[find where list=blacklist]
