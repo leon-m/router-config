@@ -105,16 +105,15 @@ global ConfigVerNew
 #   4. accept SSH from anywhere [make sure, though, that only authorized kays may acces it, no username/password access]
 #   5. accept DNS queries from intranet
 #   6. drop everythign else
-/ip firewall raw add chain=prerouting action=drop src-address-list=blacklist comment="$ConfigVerNew :fastrack drop from blacklisted IPs even before routing"
-/ip firewall filter add chain=input protocol=icmp action=jump jump-target=chain-icmp comment="$ConfigVerNew :process all ICMPs in a separate chain"
-/ip firewall filter add chain=input action=accept connection-state=established,related,untracked comment="$ConfigVerNew :accept all established sessions" 
+/ip firewall filter add chain=input action=accept connection-state=established,related,untracked comment="$ConfigVerNew :accept all established and related sessions" 
 /ip firewall filter add chain=input action=accept in-interface=magenta comment="$ConfigVerNew :accept all trafic from magenta (admin) interface"
+/ip firewall filter add chain=input protocol=icmp action=jump jump-target=chain-icmp comment="$ConfigVerNew :process all ICMPs in a separate chain"
 /ip firewall filter add chain=input action=accept dst-port=22 src-address-list=intranet protocol=tcp comment="$ConfigVerNew :accept ssh from intranet"
 /ip firewall filter add chain=input action=accept dst-port=22 src-address-list=digiverse protocol=tcp comment="$ConfigVerNew :accept ssh from Digiverse"
 /ip firewall filter add chain=input action=accept dst-port=53 protocol=tcp in-interface-list=intranet comment="$ConfigVerNew :accept DNS queries from intranet; tcp"
 /ip firewall filter add chain=input action=accept dst-port=53 protocol=udp in-interface-list=intranet comment="$ConfigVerNew :accept DNS queries from intranet; udp"
-/ip firewall filter add chain=input action=add-src-to-address-list address-list=blacklist address-list-timeout=24h in-interface=telekom comment="$ConfigVerNew :log and blacklist dropped connect attemts" log=yes log-prefix="#BLACKLISTED: "
-/ip firewall filter add chain=input action=drop comment="$ConfigVerNew :drop all not explicitly accepted packets" 
+/ip firewall filter add chain=input action=drop log=yes log-prefix="#BLACKLISTED: " in-interface=telekom comment="$ConfigVerNew :drop and log unsolicited packets from internet"
+/ip firewall filter add chain=input action=drop comment="$ConfigVerNew :drop all other not explicitly accepted packets from intranet but do not log them" 
 
 # --- protection for LAN, forward chain
 # Forward chain filters processed in the following order
