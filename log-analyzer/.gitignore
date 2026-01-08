@@ -1,3 +1,4 @@
 bin/
 include/
 lib/python3.13/
+lib/__pycache__/
