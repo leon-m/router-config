@@ -9,7 +9,7 @@
             "type": "debugpy",
             "request": "launch",
             "program": "log-analyzer.py",
-            "args": [ "--fetch-method", "ssh",  "--log-level", "DEBUG"],
+            "args": [ "--fetch-method", "file",  "--raw-database", "xx.json", "display"],
             "console": "integratedTerminal"
         }
     ]
