@@ -14,13 +14,21 @@ global ConfigVerNew
 
 :put "  Configuring System Stuff"
 :put "    Configuring logging subsystem"
-if ([/system/logging/action/find name=LogToNas]) do={
-    /system logging action remove numbers=[find where name=LogToNas]
-    /system logging remove numbers=[find invalid]
-}
 
-# first, info logs are not necessary
+system logging remove numbers=[find where topics~"(dhcp;info|info;dhcp)"]
+system logging remove numbers=[find where topics~"(account;info|info;account)"]
+system logging remove numbers=[find where topics~"(ssh;info|info;ssh)"]
+system logging remove numbers=[find where topics~"(system;info|info;system)"]
+system logging remove numbers=[find where topics~"firewall"]
+
+# first, info logs are not necessary so disqble them
 system logging disable numbers=[find where topics~"info"]
+# but keep few info leve stuff reardless
+system logging add topics=dhcp,info action=memory
+system logging add topics=account,info action=memory
+system logging add topics=ssh,info action=memory
+system logging add topics=system,info action=memory
+
 # now configure remote logs for what could be hacking attepmts
-/system logging action add name="LogToNas" target=remote remote=192.168.3.99 remote-port=7318 src-address=192.168.3.1 bsd-syslog=no syslog-time-format=bsd-syslog syslog-facility=daemon syslog-severity=notice
-/system logging add action=LogToNas topics=firewall
+/system/logging/action/set numbers=[find where name=remote] target=remote remote=192.168.3.99 remote-port=7318 src-address=192.188.3.1 bsd-syslog=no syslog-time-format=bsd-syslog syslog-facility=daemon syslog-severity=auto
+system logging add topics=firewall action=remote
