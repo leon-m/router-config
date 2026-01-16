@@ -69,7 +69,7 @@ def set_log_level(l):
 
 def set_log_file(file: str) -> None:
     global log_file
-    log_file = None if file == "none" else file
+    log_file = None if file == 'none' else file
 
 def get_log_level():
     return log_level

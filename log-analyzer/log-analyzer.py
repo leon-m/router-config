@@ -1,52 +1,105 @@
+#!/usr/bin/env python3
+
 import argparse
-import subprocess
-import json
-from logging import Logger
 from lib.logging import FMT_CONCISE, get_logger, set_log_level, set_log_file
 from lib.log_fetcher import LogFetcher
-from lib.log_model import json_list_to_log
+from lib.log_db import get_db_adapter
+from lib.db_adapter import DbAdapter
+from lib.utils import epoch2iso8601
+from lib.geoip import GeoipScraper
 
 do_display = True
 
+import textwrap as _textwrap
+class MultilineFormatter(argparse.HelpFormatter):
+    def _fill_text(self, text, width, indent):
+#        text = self._whitespace_matcher.sub(' ', text).strip()
+        paragraphs = text.split('|n')
+        multiline_text = ''
+        for paragraph in paragraphs:
+            formatted_paragraph = _textwrap.fill(paragraph, width, initial_indent=indent, subsequent_indent=indent) + '\n'
+            multiline_text = multiline_text + formatted_paragraph
+        return multiline_text
+    
 def get_arg_parser(desc : str) -> argparse.ArgumentParser:
-    arg_parser = argparse.ArgumentParser(description=desc)
+    desc = """
+This program displays, imports and analyzes log records, primarily for the firawall channel,
+produced by the router and stored into the SQLite3 database on NAS. It can fetch log records from
+different log record sources:|n|n
+    file://<path to file>|n
+        This source is expected to be JSON file produced by exporting SQLite database into array of
+        JSON objects. This source can only be used for 'display' and 'import' commands.|n|n
+    ssh://user@host:<path to SQLite database>|n
+        This source will use ssh to run the SQLite command that exports the database into array of
+        JSON objects and will intercept and parse the output. This source can only be used for 'display' 
+        and 'import' commands. Note that the remote system must already have the public key of the calling
+        user stored as the authorized keys. Password authentication is not supported.|n|n
+    postgresql://<username>:<password>@<hostname>:<port>/<database-name>|n
+        This source will read the PostgreSQL database containing already imported log records. This
+        source cannot be used for 'import' command.
+    """
+    arg_parser = argparse.ArgumentParser(description=desc, formatter_class=MultilineFormatter)
     arg_parser.add_argument('--log-level', action='store', default='INFO', help="Log level threashold", choices=['ERROR', 'WARNING', 'INFO', 'DEBUG'] )
-    arg_parser.add_argument('--log-file', action='store', default='none', help='Log file to store JSON formatted logs to [logfile.log]')
-    arg_parser.add_argument('--fetch-method', action='store', default='none', help='log record fetch method', choices=['none', 'ssh', 'file'])
-    arg_parser.add_argument('--fetch-login', action='store', default='root@nas.moja-domena.eu', help="ssh login info to fetch logs from")
-    arg_parser.add_argument('--fetch-since', action='store', type=int, help='fetch records later than time specified as seconds since EPOCH')
-    arg_parser.add_argument('--raw-database', action='store', default='/volumeUSB1/usbshare/system-logs/192.168.3.1/SYNOSYSLOGDB_192.168.3.1.DB', help='Log database on Synology NAS')
-    arg_parser.add_argument('command', choices=['import', 'display'])
+    arg_parser.add_argument('--log-file', action='store', default='none', help='Log file to store JSON formatted logs to [none]')
+    arg_parser.add_argument('--source', action='store', default='ssh://root@nas.moja-domena.eu:/volumeUSB1/usbshare/system-logs/192.168.3.1/SYNOSYSLOGDB_192.168.3.1.DB', help='log record source ,see desctiption')
+
+    arg_parser.add_argument('--since-epoch', action='store', default=0, help='fetch records later than time specified as seconds since EPOCH')
+    arg_parser.add_argument('--db', action='store', default='postgresql://loguser:no-password@127.0.0.1:5432/logdb', help='Connecti string to use the database of imported logs')
+    arg_parser.add_argument('command', nargs='+', choices=['fetch', 'display', 'import', 'create-schema', 'geoip'])
     return arg_parser
 
-def fetch_logs_from_storage(log : Logger, credentials : str, db : str, last_timestamp : int) -> subprocess.CompletedProcess:
-    cmd = [ 'ssh', credentials, 'sqlite3 --json {:} "select * from logs where utcsec > {:}"'.format(db, last_timestamp) ]
-    log.info('fetching logs from storage')
-    log.debug('fetch command {:}'.format(' '.join(cmd)))
-    result = subprocess.run(cmd, stdout=subprocess.PIPE)
-    if result.returncode == 0:
-        logs = json.loads(result.stdout)
-        log.info('received {:} log records'.format(len(logs)))
-    return result
+def fetch(cmdline : argparse.Namespace, since : int) -> LogFetcher:
+    return LogFetcher.get(cmdline, since)
 
+def display(cmdline: argparse.Namespace, records : LogFetcher) -> LogFetcher:
+    if records is None:
+        records = fetch(cmdline, cmdline.since_epoch)
+    for record in records:
+        print(record)
+    return records
 
+def geoip(cmdline : argparse.Namespace) -> None:
+    db = get_db_adapter(cmdline.db)
+    scraper = GeoipScraper(db)
+    scraper.scrape_loop(0)
+
+def do_import(cmdline : argparse.Namespace, records : LogFetcher) -> LogFetcher:
+    if cmdline.source == cmdline.db:
+        log.error(f'For import operation both --source and --db cannot be set to the same URL {cmdline.db}')
+        exit(1)
+
+    db = get_db_adapter(cmdline.db)
+    if records is None:
+        most_recent = db.get_most_recent_timestamp()
+        log.info(f'Will import raw log records newer than {epoch2iso8601(most_recent)} from {cmdline.source}')
+        records = fetch(cmdline, most_recent)
+    db.do_import(records)
+
+def do_create_schema(cmdline : argparse.Namespace) -> None:
+    db = get_db_adapter(cmdline.db)
+    db.create_schema()
 
 # --- main part
 if __name__=="__main__":
     arg_parser = get_arg_parser('MikroTik log file anayzer')
     cmdline = arg_parser.parse_args()
+    fetcher = None
 
     set_log_file(cmdline.log_file)
     set_log_level(cmdline.log_level)
     log = get_logger(__name__, FMT_CONCISE)
 
-    fetcher = LogFetcher(cmdline.fetch_method, cmdline.fetch_login, cmdline.raw_database)
-    result = fetcher.fetch(0 if cmdline.fetch_since is None else cmdline.fetch_since)
-    ret = json_list_to_log(result)
-    for item in ret:
-        print(item)
-#    ret = fetch_logs_from_storage(log, cmdline.log_ssh_login, cmdline.log_database, 1767657450)
-#    result = json.loads(ret.stdout)
-#    print('received {:} log records'.format(len(result)))
-#    print(result[0]['msg'])
+    for command in cmdline.command:
+        if command == 'display':
+            display(cmdline=cmdline, records=fetcher)
+        elif command == 'fetch':
+            fetcher = fetch(cmdline)
+        elif command == 'import':
+            do_import(cmdline, fetcher)
+        elif command == 'create-schema':
+            do_create_schema(cmdline)
+        elif command == 'geoip':
+            geoip(cmdline)
+        else:
+            log.warning(f'unrecognized command {command}, ignored')
 
