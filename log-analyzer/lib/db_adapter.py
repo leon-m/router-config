@@ -45,3 +45,11 @@ class DbAdapter:
     def set_geoip_data(self, addr : str, country : str, c_code : str, city : str, isp : str, org : str, lat : str, lon : str) -> None:
         raise NotImplementedError
 
+    def start_transaction(self):
+        raise NotImplementedError
+
+    def commit_transaction(self):
+        raise NotImplementedError
+
+    def rollback_transaction(self):
+         raise NotImplementedError

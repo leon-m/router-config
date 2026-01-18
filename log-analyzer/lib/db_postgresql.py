@@ -7,7 +7,6 @@ from lib.logging import get_logger
 from lib.log_model import RecordType
 from lib.ipv4 import IPv4Protocol
 from lib.db_adapter import DbAdapter, Username
-
 class PostgreSqlAdapter(DbAdapter):
     version : int = 1
     schema : str = f'v{version}'
@@ -38,7 +37,16 @@ class PostgreSqlAdapter(DbAdapter):
             else:
                 self._fetch_result = self.run_sql(f'SELECT * from v1.v_any WHERE timestamp > {self._since}')
             return self.__next__()
-        
+
+    def start_transaction(self):
+        pass
+
+    def commit_transaction(self):
+        pass
+
+    def rollback_transaction(self):
+        pass
+       
     def fetch(self, since : int) -> Iterator:
         self._since = since
         self._fetch_result = self.run_sql(f'SELECT * FROM v1.v_tcp WHERE timestamp > {self._since}')
@@ -51,8 +59,8 @@ class PostgreSqlAdapter(DbAdapter):
 
     def get_unresolved_geoip(self, nitems : int) -> Iterator:
         result = self.run_sql("""
-                                SELECT addr from {:}.geoip 
-                                WHERE resolved = FALSE AND addr NOT LIKE '192.168.%'
+                                SELECT DISTINCT addr from {:}.geoip 
+                                WHERE resolved = FALSE
                                 FETCH FIRST {:} ROWS ONLY
                               """.format(self.schema, nitems))
         return result
@@ -66,7 +74,7 @@ class PostgreSqlAdapter(DbAdapter):
                         SET resolved = TRUE,
                             country = '{:}', country_code = '{:}', city =  '{:}',
                             isp = '{:}', org = '{:}', lat = {:}, lon = {:}
-                        WHERE addr = '{:}'
+                        WHERE resolved = FALSE AND addr = '{:}'
                      """.format(self.schema, self._sanitize(country), c_code, self._sanitize(city), self._sanitize(isp), self._sanitize(org), lat, lon, addr))
         
     def do_import(self, records : Iterator):
@@ -82,6 +90,7 @@ class PostgreSqlAdapter(DbAdapter):
                     )
                     insert into {:}.log_messages(log_id, message)
                         select id, '{:}' from new_record
+                        returning log_id
                 """.format(
                     self.schema,
                     int(record.timestamp.replace(tzinfo=timezone.utc).timestamp()),
@@ -106,6 +115,7 @@ class PostgreSqlAdapter(DbAdapter):
                         )
                         INSERT INTO {:}.log_tcp(log_id, tcp_state, src_addr, src_port, dst_addr, dst_port)
                             SELECT log_id, '{:}', '{:}', {:}, '{:}', {:} FROM new_ip
+                            RETURNING log_id
                     """.format(
                         self.schema,
                         int(record.timestamp.replace(tzinfo=timezone.utc).timestamp()),
@@ -137,6 +147,7 @@ class PostgreSqlAdapter(DbAdapter):
                         )
                         INSERT INTO {:}.log_udp(log_id, src_addr, src_port, dst_addr, dst_port)
                             SELECT log_id, '{:}', {:}, '{:}', {:} FROM new_ip
+                            RETURNING log_id
                     """.format(
                         self.schema,
                         int(record.timestamp.replace(tzinfo=timezone.utc).timestamp()),
@@ -167,6 +178,7 @@ class PostgreSqlAdapter(DbAdapter):
                         )
                         INSERT INTO {:}.log_icmp(log_id, type, code, src_addr, dst_addr)
                             SELECT log_id, {:}, {:}, '{:}', '{:}' FROM new_ip
+                            RETURNING log_id
                     """.format(
                         self.schema,
                         int(record.timestamp.replace(tzinfo=timezone.utc).timestamp()),
@@ -197,6 +209,7 @@ class PostgreSqlAdapter(DbAdapter):
                         )
                         INSERT INTO {:}.log_any(log_id, src_addr, dst_addr)
                             SELECT log_id, '{:}', '{:}' FROM new_ip
+                            RETURNING log_id
                     """.format(
                         self.schema,
                         int(record.timestamp.replace(tzinfo=timezone.utc).timestamp()),
@@ -214,10 +227,10 @@ class PostgreSqlAdapter(DbAdapter):
                 
                 # try to insert into geoip database if not there yet
                 if not str(src_addr).startswith('192.168.'):
+                    last_id = self.cursor.fetchone()[0]
                     self.run_sql("""
-                                    INSERT INTO {:}.geoip (addr) VALUES('{:}')
-                                        ON CONFLICT (addr) DO NOTHING
-                                """.format(self.schema, src_addr))
+                                    INSERT INTO {:}.geoip (log_id, addr) VALUES({:}, '{:}')
+                                """.format(self.schema, last_id, src_addr))
 
     def run_sql(self, sql: str, cursor : psycopg.Cursor = None) -> Any:
         cursor = self.cursor if cursor is None else cursor
@@ -286,7 +299,8 @@ class PostgreSqlAdapter(DbAdapter):
                       """.format(self.schema, self.schema))
         self.run_sql("""
                         CREATE TABLE {:}.geoip(
-                            addr TEXT PRIMARY KEY,
+                            log_id bigint REFERENCES {:}.log_base(id),
+                            addr TEXT,
                             resolved BOOLEAN DEFAULT FALSE,
                             country TEXT,
                             country_code TEXT,
@@ -296,67 +310,87 @@ class PostgreSqlAdapter(DbAdapter):
                             lat DECIMAL(10,4),
                             lon DECIMAL(10,4)
                       )
-                      """.format(self.schema))
+                      """.format(self.schema, self.schema))
         self.run_sql("""
-                        CREATE VIEW v1.v_tcp AS
+                        CREATE VIEW {:}.v_tcp AS
                             SELECT b.*, ip.protocol, ip.conn_state, ip.in_itf, 
                                    tcp.tcp_state, tcp.src_addr, tcp.src_port,
                                    tcp.dst_addr, tcp.dst_port 
-                                FROM v1.log_base b
-                            FULL OUTER JOIN v1.log_ip ip ON b.id = ip.log_id
-                            FULL OUTER JOIN v1.log_tcp tcp ON b.id = tcp.log_id
+                                FROM {:}.log_base b
+                            FULL OUTER JOIN {:}.log_ip ip ON b.id = ip.log_id
+                            FULL OUTER JOIN {:}.log_tcp tcp ON b.id = tcp.log_id
                             WHERE ip.protocol = 6
-                      """)
+                      """.format(self.schema, self.schema, self.schema, self.schema))
         self.run_sql("""
-                        CREATE VIEW v1.v_udp AS
+                        CREATE VIEW {:}.v_udp AS
                             SELECT b.*, ip.protocol, ip.conn_state, ip.in_itf, 
                                    udp.src_addr, udp.src_port, udp.dst_addr, 
                                    udp.dst_port 
-                                FROM v1.log_base b
-                            FULL OUTER JOIN v1.log_ip ip ON b.id = ip.log_id
-                            FULL OUTER JOIN v1.log_udp udp ON b.id = udp.log_id
+                                FROM {:}.log_base b
+                            FULL OUTER JOIN {:}.log_ip ip ON b.id = ip.log_id
+                            FULL OUTER JOIN {:}.log_udp udp ON b.id = udp.log_id
                             WHERE ip.protocol = 17
-                      """)
+                      """.format(self.schema, self.schema, self.schema, self.schema))
         self.run_sql("""
-                        CREATE VIEW v1.v_icmp AS
+                        CREATE VIEW {:}.v_icmp AS
                             SELECT b.*, ip.protocol, ip.conn_state, ip.in_itf,
                                    icmp.type as icmp_type, icmp.code as icmp_code, 
                                    icmp.src_addr, icmp.dst_addr
-                                FROM v1.log_base b
-                            FULL OUTER JOIN v1.log_ip ip ON b.id = ip.log_id
-                            FULL OUTER JOIN v1.log_icmp icmp ON b.id = icmp.log_id
+                                FROM {:}.log_base b
+                            FULL OUTER JOIN {:}.log_ip ip ON b.id = ip.log_id
+                            FULL OUTER JOIN {:}.log_icmp icmp ON b.id = icmp.log_id
                             WHERE ip.protocol = 1
-                      """)    
+                      """.format(self.schema, self.schema, self.schema, self.schema))    
         self.run_sql("""
-                        CREATE VIEW v1.v_any AS
+                        CREATE VIEW {:}.v_any AS
                             SELECT b.*, ip.protocol, ip.conn_state, ip.in_itf, 
-                                   v1.log_any.src_addr, v1.log_any.dst_addr 
-                                FROM v1.log_base b
-                            FULL OUTER JOIN v1.log_ip ip ON b.id = ip.log_id
-                            FULL OUTER JOIN v1.log_any ON b.id = v1.log_any.log_id
+                                   xany.src_addr, xany.dst_addr 
+                                FROM {:}.log_base b
+                            FULL OUTER JOIN {:}.log_ip ip ON b.id = ip.log_id
+                            FULL OUTER JOIN {:}.log_any xany ON b.id = xany.log_id
                             WHERE ip.protocol NOT IN (1, 6, 17)
-                      """)
+                      """.format(self.schema, self.schema, self.schema, self.schema))
         self.run_sql("""
-                        CREATE VIEW v1.v_other AS
-                            SELECT b.*, m.message FROM v1.log_base b
-                            FULL OUTER JOIN v1.log_messages m ON b.id = m.log_id
+                        CREATE VIEW {:}.v_other AS
+                            SELECT b.*, m.message FROM {:}.log_base b
+                            FULL OUTER JOIN {:}.log_messages m ON b.id = m.log_id
                             WHERE b.type = 1
-                      """)
+                      """.format(self.schema, self.schema, self.schema))
         self.run_sql("""
-                        CREATE VIEW v1.v_firewall AS
+                        CREATE VIEW {:}.v_firewall AS
                             SELECT tcp.id, tcp.timestamp, tcp.severity, tcp.protocol, tcp.conn_state, 
-                                   tcp.in_itf, tcp.src_addr, tcp.dst_addr from v1.v_tcp tcp
+                                   tcp.in_itf, tcp.src_addr, tcp.dst_addr from {:}.v_tcp tcp
                         UNION
                             SELECT udp.id, udp.timestamp, udp.severity, udp.protocol, udp.conn_state,
-                                   udp.in_itf, udp.src_addr, udp.dst_addr from v1.v_udp udp
+                                   udp.in_itf, udp.src_addr, udp.dst_addr from {:}.v_udp udp
                         UNION
                             SELECT icmp.id, icmp.timestamp, icmp.severity, icmp.protocol, icmp.conn_state,
-                                   icmp.in_itf, icmp.src_addr, icmp.dst_addr from v1.v_icmp icmp
+                                   icmp.in_itf, icmp.src_addr, icmp.dst_addr from {:}.v_icmp icmp
                         UNION
                             SELECT xany.id, xany.timestamp, xany.severity, xany.protocol, xany.conn_state,
-                                   xany.in_itf, xany.src_addr, xany.dst_addr from v1.v_any xany
-                      """)
-        
+                                   xany.in_itf, xany.src_addr, xany.dst_addr from {:}.v_any xany
+                      """.format(self.schema, self.schema, self.schema, self.schema, self.schema))
+        self.run_sql("""
+                        CREATE VIEW {:}.v_tcp_udp AS
+                            SELECT tcp.id, tcp.timestamp, tcp.severity, tcp.protocol, tcp.conn_state, 
+                                   tcp.in_itf, tcp.src_addr, tcp.src_port, tcp.dst_addr, tcp.dst_port from {:}.v_tcp tcp
+                        UNION
+                            SELECT udp.id, udp.timestamp, udp.severity, udp.protocol, udp.conn_state,
+                                   udp.in_itf, udp.src_addr, udp.src_port, udp.dst_addr, udp.dst_port from {:}.v_udp udp
+                      """.format(self.schema, self.schema, self.schema))
+        self.run_sql("""
+                        CREATE VIEW {:}.v_tcp_udp_geo AS
+                            SELECT fw.*, geo.country, geo.city, geo.isp, geo.org, geo.lat, geo.lon 
+                                FROM {:}.v_tcp_udp fw
+                            FULL OUTER JOIN {:}.geoip geo ON fw.id = geo.log_id
+                     """.format(self.schema, self.schema, self.schema))
+        self.run_sql("""
+                        CREATE VIEW {:}.v_firewall_geo AS
+                            SELECT fw.*, geo.country, geo.city, geo.isp, geo.org, geo.lat, geo.lon 
+                                FROM {:}.v_firewall fw
+                            FULL OUTER JOIN {:}.geoip geo ON fw.id = geo.log_id
+                     """.format(self.schema, self.schema, self.schema))
+
 
     def _init_db(self, cursor: psycopg.Cursor, dbname : str, loguser : Username) -> None:
         self.log.info(f'Database {dbname} to store processed router logs was not found, will create one')
@@ -370,4 +404,3 @@ class PostgreSqlAdapter(DbAdapter):
         # create new database and make loguser its owner
         self.log.info(f'ceating database "{dbname}"')
         result = cursor.execute(f'CREATE DATABASE {dbname} WITH OWNER={loguser.username}')
-        
