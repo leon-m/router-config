@@ -1,7 +1,7 @@
 
 from typing import Iterator
 from dataclasses import dataclass
-
+from lib.blacklist_model import BlacklistItem
 @dataclass
 class Username:
     username : str
@@ -43,6 +43,15 @@ class DbAdapter:
         raise NotImplementedError
 
     def set_geoip_data(self, addr : str, country : str, c_code : str, city : str, isp : str, org : str, lat : str, lon : str) -> None:
+        raise NotImplementedError
+
+    def clear_blacklist(self) -> None:
+        raise NotImplementedError
+    
+    def insert_into_blacklist(self, bl : list[str]) -> None:
+        raise NotImplementedError
+    
+    def remove_from_blacklist(self, addresses: list[str]) -> None:
         raise NotImplementedError
 
     def start_transaction(self):

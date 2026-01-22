@@ -8,8 +8,7 @@ from lib.log_db import get_db_adapter
 from lib.db_adapter import DbAdapter
 from lib.utils import epoch2iso8601
 from lib.geoip import GeoipScraper
-
-do_display = True
+from lib.blacklist import import_blacklist
 
 import textwrap as _textwrap
 class MultilineFormatter(argparse.HelpFormatter):
@@ -24,25 +23,38 @@ class MultilineFormatter(argparse.HelpFormatter):
     
 def get_arg_parser(desc : str) -> argparse.ArgumentParser:
     desc = """
-This program displays, imports and analyzes log records, primarily for the firawall channel,
-produced by the router and stored into the SQLite3 database on NAS. It can fetch log records from
-different log record sources:|n|n
+This program displays, imports and analyzes log records, primarily for the firewall channel, |n
+produced by the router and stored into the SQLite3 database on NAS. It can fetch log records from |n
+different log record sources, as specified by --source command line option:|n|n
     json://file::<path to file>|n
-        This source is expected to be JSON file produced by exporting SQLite database into array of
+        This source is expected to be JSON file produced by exporting SQLite database into array of|n
         JSON objects. This source can only be used for 'display' and 'import' commands.|n|n
     json://sqlite::user@host:<path to SQLite database>|n
-        This source will use ssh to run the SQLite command that exports the database into array of
-        JSON objects and will intercept and parse the output. This source can only be used for 'display' 
-        and 'import' commands. Note that the remote system must already have the public key of the calling
+        This source will use ssh to run the SQLite command that exports the database into array of|n
+        JSON objects and will intercept and parse the output. This source can only be used for 'display'|n 
+        and 'import' commands. Note that the remote system must already have the public key of the calling|n
         user stored as the authorized keys. Password authentication is not supported.|n|n
     json://sqlite::<path to SQLite database>|n
-        Similar to the source using ssh above, but will run sqlite3 command to export log recods on the
-        local machone.
+        Similar to the source using ssh above, but will run sqlite3 command to export log recods on the|n
+        local machine. |n
     postgresql://<username>:<password>@<hostname>:<port>/<database-name>|n
-        This source will read the PostgreSQL database containing already imported log records. 
+        This source will read the PostgreSQL database containing already imported log records. |n
     sqlite://<path to SQLite databse>|n
-        This source will read the SQLite database containing already imported log records. 
-    """
+        This source will read the SQLite database containing already imported log records.|n
+|n|n
+The program can use either SQLite3 or PostgreSQL database engise  to run its internal database. The|n
+engines are selected via --db command line option as aqlite or postgresl URIs as specified above.
+|n|n
+Blacklist sources via --blacklist command line option: |n
+    json://abuseipdb::<path-to-jsonfile>|n
+        Blacklist is read from the JSON file with format returned by https::/abuseipdb.com/api/v2/blacklist |n
+    https://abuseipdb.com/api/v2/blacklist|n
+        Blacklist is read from the above URL|n
+    postgresql://<username>:<password>@<hostname>:<port>/<database-name>|n
+    sqlite://<path to SQLite databse>|n
+        Blacklist is read from the databse as specfied |n
+       
+"""
 
     arg_parser = argparse.ArgumentParser(description=desc, formatter_class=MultilineFormatter)
     arg_parser.add_argument('--log-level', action='store', default='INFO', help="Log level threashold", choices=['ERROR', 'WARNING', 'INFO', 'DEBUG'] )
@@ -51,7 +63,8 @@ different log record sources:|n|n
 
     arg_parser.add_argument('--since-epoch', action='store', default=0, help='fetch records later than time specified as seconds since EPOCH')
     arg_parser.add_argument('--db', action='store', default='postgresql://loguser:no-password@127.0.0.1:5432/logdb', help='Connecti string to use the database of imported logs')
-    arg_parser.add_argument('command', nargs='+', choices=['display', 'import', 'create-schema', 'geoip'])
+    arg_parser.add_argument('--blacklist', action='store', default='bitwire-it:///Users/leon/work/private/intranet/ip_list_fetch', help='Blacklist source for import')
+    arg_parser.add_argument('command', nargs='+', choices=['display', 'import', 'create-schema', 'geoip', 'bl-import'])
     return arg_parser
 
 def do_display(cmdline: argparse.Namespace) -> None:
@@ -81,6 +94,10 @@ def do_create_schema(cmdline : argparse.Namespace) -> None:
     db = get_db_adapter(cmdline.db)
     db.create_schema()
 
+def do_import_blacklist(cmdline : argparse.Namespace):
+    db = get_db_adapter(cmdline.db)
+    import_blacklist(cmdline.blacklist, db)
+
 # --- main part
 if __name__=="__main__":
     arg_parser = get_arg_parser('MikroTik log file anayzer')
@@ -99,6 +116,8 @@ if __name__=="__main__":
             do_create_schema(cmdline)
         elif command == 'geoip':
             do_geoip(cmdline)
+        elif command == 'bl-import':
+            do_import_blacklist(cmdline)
         else:
             log.warning(f'unrecognized command {command}, ignored')
 

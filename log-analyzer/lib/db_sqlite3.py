@@ -6,11 +6,14 @@ import sqlite3
 from lib.logging import get_logger
 from lib.log_model import RecordType
 from lib.ipv4 import IPv4Protocol
-from lib.db_adapter import DbAdapter, Username
-
+from lib.db_adapter import DbAdapter
+from lib.blacklist_model import BlacklistItem
 class Sqlite3Adapter(DbAdapter):
 
     def __init__(self, connection_string : str) -> None:
+        self._INSERT_BATCH_SIZE = 100
+        self._DELETE_BATCH_SIZE = 100
+
         self.log = get_logger(__name__)
         self._fetch_phase = None
         self._fetch_result = None
@@ -77,7 +80,50 @@ class Sqlite3Adapter(DbAdapter):
                         SET resolved = TRUE, country = '{:}', country_code = '{:}', city =  '{:}', isp = '{:}', org = '{:}', lat = {:}, lon = {:}
                         WHERE resolved = FALSE AND addr = '{:}'
                      """.format(self._sanitize(country), c_code, self._sanitize(city), self._sanitize(isp), self._sanitize(org), lat, lon, addr))
-        
+
+    def clear_blacklist(self):
+        self.log.debug('About to clear blacklist')
+        try:
+            self.start_transaction()
+            self.run_sql('DELETE FROM blacklist')
+            self.commit_transaction()
+            self.log.debug('Blacklist cleared')
+        except Exception as ex:
+            self.rollback_transaction()
+            self.log.error('exception while clearing blacklist: {"}'.format(ex))
+
+    def insert_into_blacklist(self, bl : list[str]) -> None:
+        if len(bl) > 0:
+            self.start_transaction()
+            try:
+                sql = [ f'INSERT INTO blacklist (addr) VALUES (\'{bl[0]}\')' ]
+                for addr in bl[1:]:
+                    sql.append(f', (\'{addr}\')')
+                sql.append(' ON CONFLICT (addr) DO NOTHING')
+                self.run_sql(''.join(sql))
+                self.commit_transaction();
+
+            except Exception as ex:
+                self.log.error('caught exception :"{:}"'.format(ex))
+                self.rollback_transaction()
+                raise ex
+
+    def remove_from_blacklist(self, addresses: list[str]) -> None:
+        if len(addresses) > 0:
+            self.start_transaction()
+            try:
+                sql = [ f'DELETE FROM blacklist WHERE addr IN ( \'{addresses[0]}\'']
+                for addr in addresses[1:]:
+                    sql.append(f', \'{addr}\'')
+                sql.append(')')
+                self.run_sql(''.join(sql))
+                self.commit_transaction()
+
+            except Exception as ex:
+                self.log.error('caught exception :"{:}"'.format(ex))
+                self.rollback_transaction()
+                raise ex
+
     def do_import(self, records : Iterator):
         src_addr : str = None
         for record in records:
@@ -201,7 +247,7 @@ class Sqlite3Adapter(DbAdapter):
                             protocol integer,
                             in_itf text,
                             FOREIGN KEY(log_id) REFERENCES log_base (id)
-                      )
+                        )
                       """)
         self.run_sql("""
                         CREATE TABLE IF NOT EXISTS log_tcp (
@@ -212,7 +258,7 @@ class Sqlite3Adapter(DbAdapter):
                             dst_addr text,
                             dst_port integer,
                             FOREIGN KEY(log_id) REFERENCES log_base (id)
-                      )
+                        )
                       """)
         self.run_sql("""
                         CREATE TABLE IF NOT EXISTS log_udp (
@@ -222,7 +268,7 @@ class Sqlite3Adapter(DbAdapter):
                             dst_addr text,
                             dst_port integer,
                             FOREIGN KEY(log_id) REFERENCES log_base (id)
-                      )
+                        )
                       """)
         self.run_sql("""
                         CREATE TABLE IF NOT EXISTS log_icmp (
@@ -232,7 +278,7 @@ class Sqlite3Adapter(DbAdapter):
                             src_addr text,
                             dst_addr text,
                             FOREIGN KEY(log_id) REFERENCES log_base (id)
-                      )
+                        )
                       """)
         self.run_sql("""
                         CREATE TABLE IF NOT EXISTS log_any (
@@ -240,7 +286,7 @@ class Sqlite3Adapter(DbAdapter):
                             src_addr text,
                             dst_addr text,
                             FOREIGN KEY(log_id) REFERENCES log_base (id)
-                      )
+                        )
                       """)
         self.run_sql("""
                         CREATE TABLE IF NOT EXISTS geoip(
@@ -255,8 +301,13 @@ class Sqlite3Adapter(DbAdapter):
                             lat DECIMAL(10,4),
                             lon DECIMAL(10,4),
                             FOREIGN KEY(log_id) REFERENCES log_base (id)
-                      )
+                        )
                       """)
+        self.run_sql("""
+                        CREATE TABLE IF NOT EXISTS blacklist(
+                            addr TEXT PRIMARY KEY
+                        ) WITHOUT ROWID
+                     """)
         self.run_sql("""
                         CREATE VIEW IF NOT EXISTS v_tcp AS
                             SELECT b.*, ip.protocol, ip.conn_state, ip.in_itf, 
@@ -328,12 +379,14 @@ class Sqlite3Adapter(DbAdapter):
                         CREATE VIEW IF NOT EXISTS v_tcp_udp_geo AS
                             SELECT fw.*, geo.country, geo.city, geo.isp, geo.org, geo.lat, geo.lon 
                                 FROM v_tcp_udp fw
-                            FULL OUTER JOIN geoip geo ON fw.id = geo.log_id
+                            LEFT JOIN geoip geo ON fw.id = geo.log_id 
+                            WHERE fw.src_addr NOT LIKE '192.168.%' AND geo.resolved = TRUE
                      """)
         self.run_sql("""
                         CREATE VIEW IF NOT EXISTS v_firewall_geo AS
                             SELECT fw.*, geo.country, geo.city, geo.isp, geo.org, geo.lat, geo.lon 
                                 FROM v_firewall fw
-                            FULL OUTER JOIN geoip geo ON fw.id = geo.log_id
+                            LEFT JOIN geoip geo ON fw.id = geo.log_id 
+                            WHERE fw.src_addr NOT LIKE '192.168.%' AND geo.resolved = TRUE
                      """)
 

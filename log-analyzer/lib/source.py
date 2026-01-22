@@ -19,7 +19,7 @@ def get_source(source : str, since : int) -> LogFetcher:
         return JsonFetcher(path=parts[1], since=since)
     elif parts[0] == 'postgresql':
         return PostgreSqlFetcher(connection_string=source, since=since)
-    elif parts[0] == 'sqlite3':
+    elif parts[0] == 'sqlite':
         return SQLite3Fetcher(connection_string=source, since=since)
 
     return None
