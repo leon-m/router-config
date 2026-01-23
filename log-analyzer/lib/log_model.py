@@ -167,21 +167,20 @@ LOG_MESSAGE_ICMP = '.+in:([a-zA-Z0-9_-]+).+ connection-state:([a-z]+) src-mac.+,
 # input: in:telekom out:(unknown 0), connection-state:new src-mac 10:a3:b8:9b:51:70, proto ICMP (type 8, code 0), 38.110.42.253->95.176.131.108
 LOG_MESSAGE_OTHER = '.+in:([a-zA-Z0-9_-]+).+ connection-state:([a-z]+) src-mac.+, proto ([0-9]+), ([0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+)->([0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+)'
 
-def json_to_log(rec : dict[str, str]) -> LogRecord:
-    message = rec['msg']
+def json_to_log(utcsec : int, prog : str, message : str) -> LogRecord:
     if message.startswith('#BLACKLISTED: '):
         msg = message[15:]
     elif message.startswith('!invalid: '):
         msg = message[10:]
     else:
-        return LogRecord(int(rec['utcsec']), rec['prog'], message, RecordType.GENERIC)
+        return LogRecord(utcsec, prog, message, RecordType.GENERIC)
     
     m = re.match(LOG_MESSAGE_TCP, msg)
     if not m is None:
         log.debug('{:} TCP ({:}) {:}:{:} -> {:}:{:}'.format(m.group(1), m.group(2), m.group(3), m.group(4), m.group(5), m.group(6)))
         return TCPLogRecord(
-            ts=int(rec['utcsec']),
-            topics=rec['prog'],
+            ts=utcsec,
+            topics=prog,
             cs=m.group(2),
             tcp_st=m.group(3),
             src_addr=m.group(4),
@@ -194,8 +193,8 @@ def json_to_log(rec : dict[str, str]) -> LogRecord:
     if not m is None:
         log.debug('{:} UDP {:}:{:} -> {:}:{:}'.format(m.group(1), m.group(2), m.group(3), m.group(4), m.group(5)))
         return UDPLogRecord(
-            ts=int(rec['utcsec']),
-            topics=rec['prog'],
+            ts=utcsec,
+            topics=prog,
             cs=m.group(2),
             src_addr=m.group(3),
             src_port=m.group(4),
@@ -207,8 +206,8 @@ def json_to_log(rec : dict[str, str]) -> LogRecord:
     if not m is None:
         log.debug('{:} ICMP ({:},{:}) {:} -> {:}'.format(m.group(1), m.group(2), m.group(3), m.group(4), m.group(5)))
         return ICMPLogRecord(
-            ts=int(rec['utcsec']),
-            topics=rec['prog'],
+            ts=utcsec,
+            topics=prog,
             cs=m.group(2),
             icmp_type=m.group(3),
             icmp_code=m.group(4),
@@ -220,8 +219,8 @@ def json_to_log(rec : dict[str, str]) -> LogRecord:
     if not m is None:
         log.debug('{:} proto {:} {:} -> {:}'.format(m.group(1), m.group(2), m.group(3), m.group(4)))
         return OtherLogRecord(
-            ts=int(rec['utcsec']),
-            topics=rec['prog'],
+            ts=utcsec,
+            topics=prog,
             cs=m.group(2),
             proto=m.group(3),
             src_addr=m.group(4),

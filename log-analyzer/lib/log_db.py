@@ -18,7 +18,7 @@ def get_db_adapter(connection_string : str) -> DbAdapter:
         return PostgreSqlAdapter(connection_string=connection_string)
     elif parts[0] == 'sqlite':
         from lib.db_sqlite3 import Sqlite3Adapter
-        return Sqlite3Adapter(connection_string=connection_string)
+        return Sqlite3Adapter(connection_string=parts[1])
     else:
         _log.error(f'Database adapter for connection string {connection_string} is not known')
         exit(1)

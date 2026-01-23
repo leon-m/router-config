@@ -18,7 +18,7 @@ class JsonFetcher(LogFetcher):
         # sqlite::<path>
         parts = path.split('::')
         if len(parts) != 2:
-            self.log.error('Json path spec must hae form <access-method>::<access-data, which {:} isn\'t.'.format(path))
+            self.log.error('Json path spec must have form <access-method>::<access-data, which {:} isn\'t.'.format(path))
             exit(1)
 
         cmds = [ ]
@@ -59,5 +59,5 @@ class JsonFetcher(LogFetcher):
             raise StopIteration
         rec = self._records[self._next]
         self._next += 1
-        return json_to_log(rec)
+        return json_to_log(int(rec['utcsec']), rec['prog'], rec['msg'])
     

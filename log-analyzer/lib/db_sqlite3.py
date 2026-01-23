@@ -18,11 +18,7 @@ class Sqlite3Adapter(DbAdapter):
         self._DELETE_BATCH_SIZE = 100
 
         self.log = get_logger(__name__)
-        parts = connection_string.split('://')
-        if len(parts) != 2:
-            self.log.error(f'sqlite3 connection string should be formed as "sqlite3://<path to database file>" which "{connection_string}" is not')
-            exit(1)
-        self._connection = sqlite3.connect(parts[1])
+        self._connection = sqlite3.connect(connection_string)
         self._cursor = self._connection.cursor()
 
     def db_name(self):
