@@ -39,23 +39,9 @@ class GeoipScraper:
 
                 self.log.info(f'service responded with code {resp.status}. Have {rl} requests left for next {ttl} seconds.')        
                 try_count = 1
-        # set_geoip_data(self, addr : str, country : str, c_code : str, city : str, isp : str, org : str, lat : str, lon : str)
-                if resp.status == 200:   
-                    try:
-                        self._db.start_transaction()         
-                        for item in resp.json():
-                            if item['status'] == 'fail':
-                                a = item['query']
-                                m = item['message']
-                                self.log.warning(f'Query for IP address {a} failed with message: {m}')
-                                self._db.set_geoip_data(a, '', '', '', '', '',  '0', '0')
-                            else:
-                                self._db.set_geoip_data(item['query'], item['country'], item['countryCode'], item['city'], item['isp'], item['org'], item['lat'], item['lon'])
-                        self._db.commit_transaction()
 
-                    except Exception as ex:
-                        self.log.warning('caught exception whileupdating geoip data: {:}'.format(ex))
-                        self._db.rollback_transaction()
+                if resp.status == 200:   
+                    self._db.set_geoip_data_from_list(resp.json())                    
                 else:
                     self.log.error(f'Response code {resp.status}, will terminate the scrape loop')
                     return

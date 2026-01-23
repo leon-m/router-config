@@ -64,7 +64,7 @@ Blacklist sources via --blacklist command line option: |n
     arg_parser.add_argument('--since-epoch', action='store', default=0, help='fetch records later than time specified as seconds since EPOCH')
     arg_parser.add_argument('--db', action='store', default='postgresql://loguser:no-password@127.0.0.1:5432/logdb', help='Connecti string to use the database of imported logs')
     arg_parser.add_argument('--blacklist', action='store', default='bitwire-it:///Users/leon/work/private/intranet/ip_list_fetch', help='Blacklist source for import')
-    arg_parser.add_argument('command', nargs='+', choices=['display', 'import', 'create-schema', 'geoip', 'bl-import'])
+    arg_parser.add_argument('command', nargs='+', choices=['display', 'import', 'geoip', 'bl-import'])
     return arg_parser
 
 def do_display(cmdline: argparse.Namespace) -> None:
@@ -80,7 +80,7 @@ def do_geoip(cmdline : argparse.Namespace) -> None:
 
 def do_import(cmdline : argparse.Namespace) -> None:
     if cmdline.source == cmdline.db:
-        log.error(f'For import operation both --source and --db cannot be set to the same URL {cmdline.db}')
+        log.error(f'For import operation both --source and --db cannot be set to the same URI {cmdline.db}')
         exit(1)
 
     db = get_db_adapter(cmdline.db)
@@ -88,11 +88,7 @@ def do_import(cmdline : argparse.Namespace) -> None:
 
     log.info(f'Will import raw log records newer than {epoch2iso8601(most_recent)} from {cmdline.source}')
     records = get_source(cmdline.source, most_recent)
-    db.do_import(records)
-
-def do_create_schema(cmdline : argparse.Namespace) -> None:
-    db = get_db_adapter(cmdline.db)
-    db.create_schema()
+    db.log_import(records)
 
 def do_import_blacklist(cmdline : argparse.Namespace):
     db = get_db_adapter(cmdline.db)
@@ -112,8 +108,6 @@ if __name__=="__main__":
             do_display(cmdline=cmdline)
         elif command == 'import':
             do_import(cmdline)
-        elif command == 'create-schema':
-            do_create_schema(cmdline)
         elif command == 'geoip':
             do_geoip(cmdline)
         elif command == 'bl-import':

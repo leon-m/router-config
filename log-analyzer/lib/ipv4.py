@@ -150,23 +150,3 @@ class IPv4Protocol(Enum):
     def __str__(self) -> str:
         return self.name
 
-
-@dataclass
-class IPv4Address:
-    address : str = None
-
-    def __str__(self) -> str:
-        return self.address
-    
-@dataclass
-class IPv4Quad:
-    src_address : IPv4Address
-    src_port : int
-    dst_address : IPv4Address
-    dst_port : int
-
-    def __str__(self) -> str:
-        src = ':'.join([self.src_address, str(self.src_port)])
-        dst = ':'.join([self.dst_address, str(self.dst_port)])
-        return f'{src: >21} ===> {dst: <21s}'
-
